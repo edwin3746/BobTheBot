@@ -10,6 +10,7 @@ from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 import pytz
 import requests
+import csv
 
 local_tz = pytz.timezone('Asia/Singapore')
 current_date = datetime.datetime.now()
@@ -63,7 +64,43 @@ def load_preferences():
             return json.load(file)
     except FileNotFoundError:
         return {}
+        
+        
+#Function to save sent articles to CSV file
+def save_sent_articles(sent_articles):
+    #Limit 10 articles
+    if len(sent_articles) > 10:
+        sent_articles = sent_articles[-10:]
+    
+    with open('sent.csv', 'w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(['subscriber_id', 'article_date', 'article_title'])
+        for article in sent_articles:
+            writer.writerow(article) 
+     
+     
+#Function to load sent articles from CSV file
+def load_sent_articles():
+    sent_articles = []
+    try:
+        with open('sent.csv', 'r', newline='') as file:
+            reader = csv.reader(file)
+            next(reader)  # Skip header row
+            for row in reader:
+                subscriber_id, article_date, article_title = row
+                sent_articles.append((subscriber_id, article_date, article_title))
+    except FileNotFoundError:
+        pass
+    return sent_articles
 
+
+#Function to check if an article has already been sent to a subscriber
+def is_article_sent(subscriber_id, article_title):
+    sent_articles = load_sent_articles()
+    for article in sent_articles:
+        if article[0] == subscriber_id and article[2] == article_title:
+            return True
+    return False
 
 # Function to send articles to subscribers based on frequency preference
 def send_articles():
@@ -73,6 +110,9 @@ def send_articles():
     # Load preferences and subscribers
     preferences = load_preferences()
     subscribers = load_subscribers()
+
+    # Load sent articles
+    sent_articles = load_sent_articles()
 
     # Dictionary to track the number of articles sent per day for each user
     articles_sent_per_day = {}
@@ -96,52 +136,39 @@ def send_articles():
                 if articles_sent_per_day.get(chat_id, 0) >= num_articles:
                     continue  # Skip sending articles for this user
 
-                # Send the corresponding number of articles without exceeding the maximum
-                articles_to_send = min(num_articles, 3 - articles_sent_per_day.get(chat_id, 0))
-                for _ in range(articles_to_send):
-                    message = f"{title}\n{description}\n{link}"
-                    bot.send_message(chat_id=chat_id, text=message)
+                # Check if the article has already been sent to the subscriber
+                if is_article_sent(chat_id, title):
+                    # Skip sending this article, move to the next one
+                    continue
+
+                # Send the article to the subscriber
+                message = f"{title}\n{description}\n{link}"
+                bot.send_message(chat_id=chat_id, text=message)
 
                 # Update the number of articles sent per day for the user
-                articles_sent_per_day[chat_id] = articles_sent_per_day.get(chat_id, 0) + articles_to_send
-    
-def get_latest_news():
-    base_url = 'https://www.csa.gov.sg/alerts-advisories'
-    response = requests.get(base_url)
-    soup = BeautifulSoup(response.text, 'html.parser')
-    articles = soup.find_all('a', class_='m-card-article')
-    
-    preferences = load_preferences()
+                articles_sent_per_day[chat_id] = articles_sent_per_day.get(chat_id, 0) + 1
 
-    for article in articles:
-        href = article.get('href')
-        news_url = urljoin(base_url, href)
-        response = requests.get(news_url)
-        soup = BeautifulSoup(response.text, 'html.parser')
+                # Add the sent article to the list
+                sent_articles.append((chat_id, formatted_date, title))
+                save_sent_articles(sent_articles)
 
-        # Extract date from published article
-        note_text = soup.find('p', class_='m-card-article__note').text
-        date = note_text.split('|')[0].strip()
-        date = date.replace("Published on ", "")
-        
-        if date == formatted_date:
-            keys = preferences.keys()
-            for key in keys:
-                message1 = "Latest Alert & Advisories: " + news_url
-                bot.send_message(chat_id=key, text=message1)
-        else:
-            print("Old news la!")
-            exit(0)
+                # Check if the maximum number of articles per day has been sent for the user
+                if articles_sent_per_day[chat_id] >= num_articles:
+                    break  # Break out of the loop after reaching the maximum articles per day
+
+    # Reset the count of articles sent per day for each user
+    articles_sent_per_day.clear()
+
             
-            
-            
+
+                 
 # Function to handle the /subscribe command
 def subscribe(update, context):
     chat_id = update.message.chat_id
     if chat_id not in subscribers:
         subscribers[chat_id] = None  # Update chatID of new subscriber
         context.bot.send_message(chat_id=chat_id,
-                                 text="You have subscribed to feed updates. You can choose the frequency of articles per day via the /frequency command.")
+                                 text="You have subscribed to feed updates. To continue, Choose the frequency of articles per day via the /frequency command.")
         save_subscribers(subscribers)
     else:
         context.bot.send_message(chat_id=chat_id, text="You are already subscribed to feed updates.")
@@ -163,8 +190,8 @@ def set_frequency(update, context):
 
     frequency_options = {
         '1': 'Default (1 article per day)',
-        '2': 'Regularly (2 articles per day)',
-        '3': 'Informative (3 articles per day)'
+        '2': 'Regularly (Up to 2 articles per day)',
+        '3': 'Informative (Up to 3 articles per day)'
     }
 
     if not frequency:
@@ -251,11 +278,11 @@ updater.start_polling()
 schedule.every().day.at(get_next_occurrence(7, 30).strftime("%H:%M")).do(send_articles)
 
 # Schedule the get_latest_news function to run at 09:00 local time every day
-schedule.every().day.at(get_next_occurrence(7, 51).strftime("%H:%M")).do(get_latest_news)
+#schedule.every().day.at(get_next_occurrence(7, 51).strftime("%H:%M")).do(get_latest_news)
 
 while True:
-    schedule.run_pending()
-    time.sleep(1) 
+    send_articles()
+    time.sleep(10) 
 
 # Stop the bot gracefully
 updater.stop()
