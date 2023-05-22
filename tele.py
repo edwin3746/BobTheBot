@@ -1,16 +1,20 @@
-import feedparser
-import telegram
-from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, InlineQueryHandler
-from telegram import InlineKeyboardMarkup, InlineKeyboardButton
-import time
-import json
+import csv
 import datetime
-import schedule
-from bs4 import BeautifulSoup
+import os
+
+import pandas as pd
+import json
+import time
 from urllib.parse import urljoin
+import snscrape.modules.twitter as sntwitter
+import feedparser
 import pytz
 import requests
-import csv
+import schedule
+import telegram
+from bs4 import BeautifulSoup
+from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+from telegram.ext import Updater, CommandHandler, CallbackQueryHandler
 
 local_tz = pytz.timezone('Asia/Singapore')
 current_date = datetime.datetime.now()
@@ -22,11 +26,13 @@ bot_token = '6205012152:AAF8Z3vdKl8x536-VQyPH2fV5Q-dAIyVatQ'
 # Replace 'FEED_URL' with the actual RSS feed URL
 feed_url = 'https://www.bleepingcomputer.com/feed/'
 
+
 # Function to get the current time in your local time zone
 def get_local_time():
     utc_now = datetime.datetime.now(pytz.utc)
     local_now = utc_now.astimezone(local_tz)
     return local_now
+
 
 # Function to get the next occurrence of a specific time in your local time zone
 def get_next_occurrence(hour, minute):
@@ -35,7 +41,8 @@ def get_next_occurrence(hour, minute):
     if next_occurrence <= now:
         next_occurrence += datetime.timedelta(days=1)
     return next_occurrence
-    
+
+
 # Save subscribers to json file
 def save_subscribers(subscribers):
     with open('subscribers.json', 'w') as file:
@@ -64,22 +71,23 @@ def load_preferences():
             return json.load(file)
     except FileNotFoundError:
         return {}
-        
-        
-#Function to save sent articles to CSV file
+
+
+# Function to save sent articles to CSV file
 def save_sent_articles(sent_articles):
-    #Limit 10 articles
+    # Limit 10 articles
     if len(sent_articles) > 10:
         sent_articles = sent_articles[-10:]
-    
+
     with open('sent.csv', 'w', newline='') as file:
         writer = csv.writer(file)
         writer.writerow(['subscriber_id', 'article_date', 'article_title'])
         for article in sent_articles:
-            writer.writerow(article) 
-     
-     
-#Function to load sent articles from CSV file
+            writer.writerow(article)
+
+        # Function to load sent articles from CSV file
+
+
 def load_sent_articles():
     sent_articles = []
     try:
@@ -94,13 +102,14 @@ def load_sent_articles():
     return sent_articles
 
 
-#Function to check if an article has already been sent to a subscriber
+# Function to check if an article has already been sent to a subscriber
 def is_article_sent(subscriber_id, article_title):
     sent_articles = load_sent_articles()
     for article in sent_articles:
         if article[0] == subscriber_id and article[2] == article_title:
             return True
     return False
+
 
 # Function to send articles to subscribers based on frequency preference
 def send_articles():
@@ -159,9 +168,7 @@ def send_articles():
     # Reset the count of articles sent per day for each user
     articles_sent_per_day.clear()
 
-            
 
-                 
 # Function to handle the /subscribe command
 def subscribe(update, context):
     chat_id = update.message.chat_id
@@ -186,7 +193,8 @@ def unsubscribe(update, context):
 # Function to allow user preferred frequency
 def set_frequency(update, context):
     chat_id = update.message.chat_id
-    frequency = context.args[0] if context.args else None  # get frequency value from user or set to None if not provided
+    frequency = context.args[
+        0] if context.args else None  # get frequency value from user or set to None if not provided
 
     frequency_options = {
         '1': 'Default (1 article per day)',
@@ -268,6 +276,86 @@ dispatcher.add_handler(CommandHandler(['start', 'subscribe'], subscribe, pass_ar
 dispatcher.add_handler(CommandHandler('unsubscribe', unsubscribe))
 dispatcher.add_handler(CommandHandler('frequency', set_frequency, pass_args=True))
 
+# Create a list to append all tweet attributes (data)
+attributes_container = []
+
+# Define the filename for the CSV file
+filename = 'sent.csv'
+
+# Using TwitterSearchScraper to scrape data and append tweets to the list
+for i, tweet in enumerate(sntwitter.TwitterSearchScraper('from:CSAsingapore').get_items()):
+    if i > 10:
+        break
+    attributes_container.append([tweet.date, tweet.content])
+
+# Create dataframe for tweets listed above
+tweets_df = pd.DataFrame(attributes_container, columns=["Date Created", "Tweets"])
+
+# Date
+# current_date = datetime.date.today()
+current_date = '2023-05-19'
+
+m = tweets_df.iloc[1]
+date_str = str(m[0])
+
+# Convert string to datetime object
+datetime_obj = datetime.datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S%z")
+date_only = datetime_obj.date()
+
+# Read the existing content from the CSV file
+existing_content = set()
+try:
+    with open(filename, 'r', newline='', encoding='utf-8') as csvfile:
+        reader = csv.reader(csvfile)
+
+        # Skip the header row
+        next(reader)
+
+        for row in reader:
+            if row[0] == current_date:
+                existing_content.add(row[1])
+            else:
+                break
+except:
+    existing_content = set()
+
+def get_latest_tweets():
+
+    # Get the number of rows in the dataframe
+    num_rows = int(tweets_df.shape[0]) - 1
+
+    # Checks if file exists
+    file_exists = os.path.isfile(filename)
+
+    with open(filename, 'a' if file_exists else 'w', newline='', encoding='utf-8') as csvfile:
+        writer = csv.writer(csvfile)
+
+        if not file_exists:
+            writer.writerow(['subscriber_id', 'article_date', 'article_title'])
+
+        # Loop through each row in the dataframe and send it as a seperate message
+        for i in range(0, num_rows):
+            m = tweets_df.iloc[i]
+            date_str = str(m[0])
+            content = str(m[1])
+
+            # Convert string to datetime object
+            datetime_obj = datetime.datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S%z")
+            date_only = datetime_obj.date()
+
+            # Only sent today's tweet and those that have not been sent
+            if str(date_only) == current_date and content not in existing_content:
+                preferences = load_preferences()
+                keys = preferences.keys()
+                for key in keys:
+                    writer.writerow([key, date_only, content])
+                    msg = str(date_only) + " " + content
+
+                    bot.send_message(chat_id=key, text=msg)
+            else:
+                print("No new tweets la!")
+                exit(0)
+
 # Register callback handler for frequency options
 dispatcher.add_handler(CallbackQueryHandler(select_frequency_option))
 
@@ -278,11 +366,11 @@ updater.start_polling()
 schedule.every().day.at(get_next_occurrence(7, 30).strftime("%H:%M")).do(send_articles)
 
 # Schedule the get_latest_news function to run at 09:00 local time every day
-#schedule.every().day.at(get_next_occurrence(7, 51).strftime("%H:%M")).do(get_latest_news)
+# schedule.every().day.at(get_next_occurrence(7, 51).strftime("%H:%M")).do(get_latest_news)
 
 while True:
     send_articles()
-    time.sleep(10) 
+    time.sleep(10)
 
 # Stop the bot gracefully
 updater.stop()
