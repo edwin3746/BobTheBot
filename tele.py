@@ -17,7 +17,6 @@ from bs4 import BeautifulSoup
 from telegram import InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler
 
-local_tz = pytz.timezone('Asia/Singapore')
 current_date = datetime.datetime.now()
 formatted_date = current_date.strftime("%d %B %Y")
 formatted_date_1 = current_date.strftime("%Y-%m-%d")
@@ -40,26 +39,12 @@ for i, tweet in enumerate(sntwitter.TwitterSearchScraper('from:CSAsingapore').ge
 # Create dataframe for tweets listed above
 tweets_df = pd.DataFrame(attributes_container, columns=["Date Created", "Tweets"])
 
-# Function to get the current time in your local time zone: 2023-05-22 15:45:57.463276+08:00
-def get_local_time():
-    utc_now = datetime.datetime.now(pytz.utc)
-    local_now = utc_now.astimezone(local_tz)
-    return local_now
-
-# Function to get the next occurrence of a specific time in your local time zone
-def get_next_occurrence(hour, minute):
-    now = get_local_time()
-    next_occurrence = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
-    if next_occurrence <= now:
-        next_occurrence += datetime.timedelta(days=1)
-    return next_occurrence
-
-# Save subscribers to json file
+#Save subscribers to json file
 def save_subscribers(subscribers):
     with open('subscribers.json', 'w') as file:
         json.dump(subscribers, file)
 
-# Load subscribers from json file
+#Load subscribers from json file
 def load_subscribers():
     try:
         with open('subscribers.json', 'r') as file:
@@ -67,12 +52,12 @@ def load_subscribers():
     except FileNotFoundError:
         return {}
 
-# Function to save preferences to json file
+#Function to save preferences to json file
 def save_preferences(preferences):
     with open('preferences.json', 'w') as file:
         json.dump(preferences, file)
 
-# Function to load preferences from json file
+#Function to load preferences from json file
 def load_preferences():
     try:
         with open('preferences.json', 'r') as file:
@@ -80,7 +65,7 @@ def load_preferences():
     except FileNotFoundError:
         return {}
 
-# Function to save sent articles to CSV file
+#Function to save sent articles to CSV file
 def save_sent_articles(sent_articles):
     # Limit 10 articles
     if len(sent_articles) > 10:
@@ -112,7 +97,7 @@ def load_sent_articles(x):
     except FileNotFoundError:
         return sent_articles
 
-# Function to check if an article has already been sent to a subscriber
+#Function to check if an article has already been sent to a subscriber
 def is_article_sent(subscriber_id, article_title):
     sent_articles = load_sent_articles(1)
     for article in sent_articles:
@@ -120,61 +105,61 @@ def is_article_sent(subscriber_id, article_title):
             return True
     return False
 
-# Function to send articles to subscribers based on frequency preference
+#Function to send articles to subscribers based on frequency preference
 def send_articles():
-    # Fetch and parse the RSS feed
+    #Fetch and parse the RSS feed
     feed = feedparser.parse(feed_url)
 
-    # Load preferences and subscribers
+    #Load preferences and subscribers
     preferences = load_preferences()
     subscribers = load_subscribers()
 
-    # Load sent articles
+    #Load sent articles
     sent_articles = load_sent_articles(1)
 
-    # Dictionary to track the number of articles sent per day for each user
+    #Dictionary to track the number of articles sent per day for each user
     articles_sent_per_day = {}
 
-    # Iterate over the feed items and send them to the subscribers
+    #Iterate over the feed items and send them to the subscribers
     for entry in feed.entries:
         title = entry.title
         description = entry.description
         link = entry.link
         entry_date = entry.published
 
-        # Convert entry_date to a datetime object
+        #Convert entry_date to a datetime object
         entry_date = datetime.datetime.strptime(entry_date, "%a, %d %b %Y %H:%M:%S %z")
 
-        # Send the feed item as a message to subscribers based on their preferences
+        #Send the feed item as a message to subscribers based on their preferences
         for chat_id, frequency in preferences.items():
             if frequency.isdigit() and chat_id in subscribers:
                 num_articles = int(frequency)
 
-                # Check if the maximum number of articles per day has been reached for the user
+                #Check if the maximum number of articles per day has been reached for the user
                 if articles_sent_per_day.get(chat_id, 0) >= num_articles:
                     continue  # Skip sending articles for this user
 
-                # Check if the article has already been sent to the subscriber
+                #Check if the article has already been sent to the subscriber
                 if is_article_sent(chat_id, title):
                     # Skip sending this article, move to the next one
                     continue
 
-                # Send the article to the subscriber
+                #Send the article to the subscriber
                 message = f"{title}\n{description}\n{link}"
                 bot.send_message(chat_id=chat_id, text=message)
 
-                # Update the number of articles sent per day for the user
+                #Update the number of articles sent per day for the user
                 articles_sent_per_day[chat_id] = articles_sent_per_day.get(chat_id, 0) + 1
 
-                # Add the sent article to the list
+                #Add the sent article to the list
                 sent_articles.append((chat_id, formatted_date, title))
                 save_sent_articles(sent_articles)
 
-                # Check if the maximum number of articles per day has been sent for the user
+                #Check if the maximum number of articles per day has been sent for the user
                 if articles_sent_per_day[chat_id] >= num_articles:
                     break  # Break out of the loop after reaching the maximum articles per day
 
-    # Reset the count of articles sent per day for each user
+    #Reset the count of articles sent per day for each user
     articles_sent_per_day.clear()
 
 def get_latest_news():
@@ -189,13 +174,13 @@ def get_latest_news():
         response = requests.get(news_url)
         soup = BeautifulSoup(response.text, 'html.parser')
 
-        # Extract date from published article
+        #Extract date from published article
         note_text = soup.find('p', class_='m-card-article__note').text
         date = note_text.split('|')[0].strip()
         date = date.replace("Published on ", "")
 
         if date == formatted_date:
-            # Checks if file exists
+            #Checks if file exists
             file_exists = os.path.isfile(filename)
             with open(filename, 'a' if file_exists else 'w', newline='', encoding='utf-8') as csvfile:
                 writer = csv.writer(csvfile)
@@ -212,10 +197,10 @@ def get_latest_news():
             return
 
 def get_latest_tweets():
-    # Get the number of rows in the dataframe
+    #Get the number of rows in the dataframe
     num_rows = int(tweets_df.shape[0]) - 1
 
-    # Checks if file exists
+    #Checks if file exists
     file_exists = os.path.isfile(filename)
 
     with open(filename, 'a' if file_exists else 'w', newline='', encoding='utf-8') as csvfile:
@@ -224,17 +209,17 @@ def get_latest_tweets():
         if not file_exists:
             writer.writerow(['subscriber_id', 'article_date', 'article_title'])
 
-        # Loop through each row in the dataframe and send it as a seperate message
+        #Loop through each row in the dataframe and send it as a seperate message
         for i in range(0, num_rows):
             m = tweets_df.iloc[i]
             date_str = str(m[0])
             content = str(m[1])
 
-            # Convert string to datetime object
+            #Convert string to datetime object
             datetime_obj = datetime.datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S%z")
             date_only = datetime_obj.date()
 
-            # Only sent today's tweet and those that have not been sent
+            #Only sent today's tweet and those that have not been sent
             if date_only == current_date and content not in existing_content:
                 preferences = load_preferences()
                 keys = preferences.keys()
@@ -247,11 +232,11 @@ def get_latest_tweets():
                 print("No new tweets la!")
                 return
 
-# Function to handle the /subscribe command
+#Function to handle the /subscribe command
 def subscribe(update, context):
     chat_id = update.message.chat_id
     if chat_id not in subscribers:
-        subscribers[chat_id] = None  # Update chatID of new subscriber
+        subscribers[chat_id] = None  #Update chatID of new subscriber
         context.bot.send_message(chat_id=chat_id,
                                  text="You have subscribed to feed updates.\n\nChoose the frequency of articles per day via the /frequency command.\n\nYou can also use the /unsubscribe command to unsubscribe from feed updates.\n\nTo scan a URL for malware using VirusTotal, use the /scanurl command followed by the URL.")
         save_subscribers(subscribers)
@@ -275,10 +260,10 @@ def unsubscribe(update, context):
 
 
 
-# Function to allow user preferred frequency
+#Function to allow user preferred frequency
 def set_frequency(update, context):
     chat_id = update.message.chat_id
-    frequency = context.args[0] if context.args else None  # get frequency value from user or set to None if not provided
+    frequency = context.args[0] if context.args else None  #get frequency value from user or set to None if not provided
 
     frequency_options = {
         '1': 'Default (1 article per day)',
@@ -287,23 +272,23 @@ def set_frequency(update, context):
     }
 
     if not frequency:
-        # Show frequency options to the user
+        #Show frequency options to the user
         options = [
             [InlineKeyboardButton(option, callback_data=option)] for option in frequency_options.values()
         ]
         reply_markup = InlineKeyboardMarkup(options)
         context.bot.send_message(chat_id=chat_id, text='Choose your preferred frequency:', reply_markup=reply_markup)
     elif frequency in frequency_options:
-        # Load preferences
+        #Load preferences
         preferences = load_preferences()
 
-        # Update frequency in the preferences dictionary using chatID as key
+        #Update frequency in the preferences dictionary using chatID as key
         preferences[chat_id] = frequency
 
-        # Save the updated preferences to the file
+        #Save the updated preferences to the file
         save_preferences(preferences)
 
-        # Send confirmation message to the user
+        #Send confirmation message to the user
         message = f"Your frequency preference has been set to: {frequency_options[frequency]}"
         context.bot.send_message(chat_id=chat_id, text=message)
     else:
@@ -311,7 +296,7 @@ def set_frequency(update, context):
         context.bot.send_message(chat_id=chat_id, text=message)
 
 
-# Callback function to handle frequency option selection
+#Callback function to handle frequency option selection
 def select_frequency_option(update, context):
     query = update.callback_query
     chat_id = query.message.chat_id
@@ -326,16 +311,16 @@ def select_frequency_option(update, context):
     if frequency_option in frequency_options:
         frequency = frequency_options[frequency_option]
 
-        # Load preferences
+        #Load preferences
         preferences = load_preferences()
 
-        # Assign the new frequency value to the preferences dictionary using chatID as key
+        #Assign the new frequency value to the preferences dictionary using chatID as key
         preferences[chat_id] = frequency
 
-        # Save the updated preferences to the file
+        #Save the updated preferences to the file
         save_preferences(preferences)
 
-        # Send confirmation message to the user
+        #Send confirmation message to the user
         message = f"Your frequency preference has been set to: {frequency_option}"
         context.bot.send_message(chat_id=chat_id, text=message)
     else:
@@ -375,43 +360,44 @@ def scan_url(update, context):
         message = "Please provide a valid URL."
         context.bot.send_message(chat_id=chat_id, text=message)
         
-# Create a Telegram bot instance
+#Create a Telegram bot instance
 bot = telegram.Bot(token=bot_token)
 
-# Load subscribers from the json file
+#Load subscribers from the json file
 subscribers = load_subscribers()
 
-# Create an Updater
+#Create an Updater
 updater = Updater(bot=bot, use_context=True)
 
-# Get the dispatcher to register handlers
+#Get the dispatcher to register handlers
 dispatcher = updater.dispatcher
 
-# Register command handlers
+#Register command handlers
 dispatcher.add_handler(CommandHandler(['start', 'subscribe'], subscribe, pass_args=True))
 dispatcher.add_handler(CommandHandler('unsubscribe', unsubscribe))
 dispatcher.add_handler(CommandHandler('frequency', set_frequency, pass_args=True))
 
-# Read the existing content from the CSV file
+#Read the existing content from the CSV file
 existing_content = load_sent_articles(2)
 
-# Register callback handler for frequency options
+#Register callback handler for frequency options
 dispatcher.add_handler(CallbackQueryHandler(select_frequency_option))
 
-# Start the bot
+#Start the bot
 updater.start_polling()
 
-# Schedule the send_articles function to run at 09:00 local time every day
-# schedule.every().day.at(get_next_occurrence(7, 30).strftime("%H:%M")).do(send_articles)
+#Schedule the send_articles function to run every day
+schedule.every().day.at("01:00").do(send_articles)
 
-# Schedule the get_latest_news function to run at 09:00 local time every day
-# schedule.every().day.at(get_next_occurrence(7, 51).strftime("%H:%M")).do(get_latest_news)
+#Schedule the get_latest_news function to run every day
+schedule.every().day.at("01:00").do(get_latest_news)
+
+#Schedule the get_latest_tweets function to run every day
+schedule.every().day.at("01:00").do(get_latest_tweets)
 
 while True:
-    send_articles()
-    get_latest_tweets()
-    get_latest_news()
-    time.sleep(10)
+    schedule.run_pending()
+    time.sleep(1)
 
 # Stop the bot gracefully
 updater.stop()
