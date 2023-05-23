@@ -11,6 +11,8 @@ import pytz
 import requests
 import schedule
 import telegram
+import virustotal_python
+from base64 import urlsafe_b64encode
 from bs4 import BeautifulSoup
 from telegram import InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler
@@ -251,11 +253,10 @@ def subscribe(update, context):
     if chat_id not in subscribers:
         subscribers[chat_id] = None  # Update chatID of new subscriber
         context.bot.send_message(chat_id=chat_id,
-                                 text="You have subscribed to feed updates. To continue, Choose the frequency of articles per day via the /frequency command.")
+                                 text="You have subscribed to feed updates.\n\nChoose the frequency of articles per day via the /frequency command.\n\nYou can also use the /unsubscribe command to unsubscribe from feed updates.\n\nTo scan a URL for malware using VirusTotal, use the /scanurl command followed by the URL.")
         save_subscribers(subscribers)
     else:
         context.bot.send_message(chat_id=chat_id, text="You are already subscribed to feed updates.")
-
 
 #Function to handle the /unsubscribe command
 def unsubscribe(update, context):
@@ -340,7 +341,40 @@ def select_frequency_option(update, context):
     else:
         message = "Invalid frequency option. Please choose a valid option."
         context.bot.send_message(chat_id=chat_id, text=message)
+        
+        
+#Function to scan a URL using VirusTotal API
+def scan_url(update, context):
+    chat_id = update.message.chat_id
+    #Get user URL input
+    url = context.args[0] if context.args else None
 
+    if url:
+        #Create a VirusTotal instance using the API key
+        with virustotal_python.Virustotal("c84bf7d843786c31627b80ecae3a873a5442c07877735e581907113244fe2a13") as vtotal:
+            try:
+                #safe encode URL in base64 format
+                url_id = urlsafe_b64encode(url.encode()).decode().strip("=")
+
+                #Send the URL for analysis
+                resp = vtotal.request("urls", data={"url": url}, method="POST")
+                report = vtotal.request(f"urls/{url_id}")
+
+                    #Check the scan results
+                if report.data["attributes"]["last_analysis_stats"]["malicious"] > 0:
+                    message = f"The URL '{url}' is malicious."
+                else:
+                    message = f"The URL '{url}' is safe."
+
+                context.bot.send_message(chat_id=chat_id, text=message)
+            except virustotal_python.VirustotalError as err:
+                print(f"Failed to send URL '{url}' for analysis and get the report: {err}")
+                message = f"Failed to scan the URL. Please try again later."
+                context.bot.send_message(chat_id=chat_id, text=message)
+    else:
+        message = "Please provide a valid URL."
+        context.bot.send_message(chat_id=chat_id, text=message)
+        
 # Create a Telegram bot instance
 bot = telegram.Bot(token=bot_token)
 
