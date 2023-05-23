@@ -242,8 +242,8 @@ def select_frequency_option(update, context):
 
     frequency_options = {
         'Default (1 article per day)': '1',
-        'Regularly (2 articles per day)': '2',
-        'Informative (3 articles per day)': '3'
+        'Regularly (Up to 2 articles per day)': '2',
+        'Informative (Up to 3 articles per day)': '3'
     }
 
     if frequency_option in frequency_options:
