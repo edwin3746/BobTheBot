@@ -179,7 +179,7 @@ def get_latest_news():
         date = note_text.split('|')[0].strip()
         date = date.replace("Published on ", "")
 
-        if date == formatted_date:
+        if date == formatted_date and news_url not in existing_content:
             #Checks if file exists
             file_exists = os.path.isfile(filename)
             with open(filename, 'a' if file_exists else 'w', newline='', encoding='utf-8') as csvfile:
