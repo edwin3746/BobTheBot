@@ -262,8 +262,15 @@ def unsubscribe(update, context):
     chat_id = update.message.chat_id
     if chat_id in subscribers:
         del subscribers[chat_id]
-        context.bot.send_message(chat_id=chat_id, text="You have unsubscribed from feed updates.")
-        save_subscribers(subscribers)
+        save_subscribers(subscribers)  
+
+    preferences = load_preferences()
+
+    if chat_id in preferences:
+        del preferences[chat_id]
+        save_preferences(preferences) 
+
+    context.bot.send_message(chat_id=chat_id, text="You have unsubscribed from feed updates.")
 
 
 # Function to allow user preferred frequency
@@ -311,8 +318,8 @@ def select_frequency_option(update, context):
 
     frequency_options = {
         'Default (1 article per day)': '1',
-        'Regularly (2 articles per day)': '2',
-        'Informative (3 articles per day)': '3'
+        'Regularly (Up to 2 articles per day)': '2',
+        'Informative (Up to 3 articles per day)': '3'
     }
 
     if frequency_option in frequency_options:
