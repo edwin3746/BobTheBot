@@ -262,15 +262,14 @@ def unsubscribe(update, context):
     chat_id = update.message.chat_id
     if chat_id in subscribers:
         del subscribers[chat_id]
-        save_subscribers(subscribers)  
+        # context.bot.send_message(chat_id=chat_id, text="You have unsubscribed from feed updates.")
+        save_subscribers(subscribers)
+        preferences = load_preferences()
+        if chat_id in preferences:
+            del preferences[chat_id]
+            save_preferences(preferences)
+        context.bot.send_message(chat_id=chat_id, text="You have unsubscribed from feed updates.")
 
-    preferences = load_preferences()
-
-    if chat_id in preferences:
-        del preferences[chat_id]
-        save_preferences(preferences) 
-
-    context.bot.send_message(chat_id=chat_id, text="You have unsubscribed from feed updates.")
 
 
 # Function to allow user preferred frequency
