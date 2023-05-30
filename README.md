@@ -1,5 +1,5 @@
 # BobTheBot
-## How to Use .env File for Bot Token and API Key
+## How to Use .env File for Bot Token and Virustotal API Key
 
 ### Step 1: Create a .env File
 
