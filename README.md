@@ -11,6 +11,7 @@
 1. Add the following lines to the `.env` file
 
 BOT_TOKEN=your_bot_token_here
+
 API_KEY=your_api_key_here
 
 
