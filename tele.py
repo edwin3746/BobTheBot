@@ -12,17 +12,19 @@ import requests
 import schedule
 import telegram
 import virustotal_python
+from dotenv import load_dotenv
 from base64 import urlsafe_b64encode
 from bs4 import BeautifulSoup
 from telegram import InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler
 
+load_dotenv('api.env')
 current_date = datetime.datetime.now()
 formatted_date = current_date.strftime("%d %B %Y")
 formatted_date_1 = current_date.strftime("%Y-%m-%d")
 
 # Replace 'YOUR_BOT_TOKEN' with the token provided by BotFather
-bot_token = '6064030379:AAGu3yLp5xpfaFjLIM2muM3h1nLNn_MO844'
+bot_token = os.getenv("BOT_TOKEN")
 
 # Replace 'FEED_URL' with the actual RSS feed URL
 feed_url = 'https://www.bleepingcomputer.com/feed/'
@@ -246,15 +248,18 @@ def subscribe(update, context):
 #Function to handle the /unsubscribe command
 def unsubscribe(update, context):
     chat_id = update.message.chat_id
+
     if chat_id in subscribers:
         del subscribers[chat_id]
-        save_subscribers(subscribers)  
+        save_subscribers(subscribers)
 
     preferences = load_preferences()
 
-    if chat_id in preferences:
-        del preferences[chat_id]
-        save_preferences(preferences) 
+    pref_chat_id = str(update.message.chat_id)
+
+    if pref_chat_id in preferences:
+        del preferences[pref_chat_id]
+        save_preferences(preferences)
 
     context.bot.send_message(chat_id=chat_id, text="You have unsubscribed from feed updates.")
 
@@ -330,13 +335,14 @@ def select_frequency_option(update, context):
         
 #Function to scan a URL using VirusTotal API
 def scan_url(update, context):
+    api_key = os.getenv("API_KEY")
     chat_id = update.message.chat_id
     #Get user URL input
     url = context.args[0] if context.args else None
 
     if url:
         #Create a VirusTotal instance using the API key
-        with virustotal_python.Virustotal("c84bf7d843786c31627b80ecae3a873a5442c07877735e581907113244fe2a13") as vtotal:
+        with virustotal_python.Virustotal(api_key) as vtotal:
             try:
                 #safe encode URL in base64 format
                 url_id = urlsafe_b64encode(url.encode()).decode().strip("=")
@@ -376,6 +382,8 @@ dispatcher = updater.dispatcher
 dispatcher.add_handler(CommandHandler(['start', 'subscribe'], subscribe, pass_args=True))
 dispatcher.add_handler(CommandHandler('unsubscribe', unsubscribe))
 dispatcher.add_handler(CommandHandler('frequency', set_frequency, pass_args=True))
+dispatcher.add_handler(CommandHandler('scanurl', scan_url, pass_args=True))
+
 
 #Read the existing content from the CSV file
 existing_content = load_sent_articles(2)
@@ -398,6 +406,9 @@ schedule.every().day.at("01:00").do(get_latest_tweets)
 while True:
     schedule.run_pending()
     time.sleep(1)
+    #Uncomment below for testing
+    #send_articles()
+    #time.sleep(10)
 
 # Stop the bot gracefully
 updater.stop()
