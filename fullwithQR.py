@@ -347,7 +347,7 @@ def send_articles():
         for chat_id, frequency_profile in preferences.items():
             frequency, profile = frequency_profile
 
-            if frequency.isdigit() and chat_id in preferences:
+            if frequency and chat_id and profile == "tech_savvy" in preferences:
                 num_articles = int(frequency)
 
                 # Check if the maximum number of articles per day has been reached for the user
@@ -418,11 +418,11 @@ def start(update, context):
 
     if chat_id not in subscribers:
         subscribers[chat_id] = None  # Update chatID of new subscriber
-        bot.send_message(chat_id=chat_id, text="Thank you for subscribing.\n\nTo scan a URL for malware using VirusTotal, use the /scanurl command followed by the URL.\n\nTo scan a potential malicious URL from a QR code, upload the QR image file to this chat.\n/profile")
+        bot.send_message(chat_id=chat_id, text="Thank you for subscribing.\n\nTo scan a URL for malware using VirusTotal, use the /scanurl command followed by the URL.\n\nTo scan a potentially malicious URL from a QR code, upload the QR image file to this chat.\n\nUse the /unsubscribe command to unsubscribe from this bot.")
         save_subscribers(subscribers)
         
         profile_options = {
-            'non_tech_savvy': 'Non-Tech Savvy',
+            'non_tech_savvy': 'Non-Tech-Savvy',
             'tech_savvy': 'Tech-Savvy'
         }
 
@@ -481,7 +481,7 @@ def select_option(update, context):
 def profile(update, context):
     chat_id = update.effective_chat.id
     profile_options = {
-    'non_tech_savvy': 'Non-Tech Savvy',
+    'non_tech_savvy': 'Non-Tech-Savvy',
     'tech_savvy': 'Tech-Savvy'}
 
     # Load preferences
@@ -517,7 +517,7 @@ def profile_confirmation(update, context):
     chat_id = query.message.chat_id
     confirmation = query.data
     profile_options = {
-        'non_tech_savvy': 'Non-Tech Savvy',
+        'non_tech_savvy': 'Non-Tech-Savvy',
         'tech_savvy': 'Tech-Savvy'
     }
 
@@ -570,7 +570,7 @@ def select_frequency_option(update, context):
         # Save the updated preferences to the file
         save_preferences(preferences)
 
-        message = f"Your frequency preference has been set to: {frequency_options[frequency_option]}"
+        message = f"Your frequency preference has been set to: {frequency_options[frequency_option]}\n\nYou can change your profile preference using /profile."
         context.bot.send_message(chat_id=chat_id, text=message)
     else:
         message = "Invalid frequency option. Please choose a valid option."
@@ -584,7 +584,7 @@ def select_profile_option(update, context):
     profile_option = query.data
 
     profile_options = {
-        'non_tech_savvy': 'Non-Tech Savvy',
+        'non_tech_savvy': 'Non-Tech-Savvy',
         'tech_savvy': 'Tech-Savvy'
     }
 
@@ -618,7 +618,7 @@ def select_profile_option(update, context):
             return FREQUENCY
         else:
             # End the conversation handler here
-            context.bot.send_message(chat_id=chat_id, text='Your profile option has been saved.')
+            context.bot.send_message(chat_id=chat_id, text='Your profile option has been saved.\n\nYou can change your profile preference using /profile.')
             return ConversationHandler.END
 
     return ConversationHandler.END
