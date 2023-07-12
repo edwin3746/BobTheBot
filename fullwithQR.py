@@ -37,6 +37,8 @@ filename = 'sent.csv'
 
 FREQUENCY, PROFILE = range(2)
 PROFILE_CONFIRMATION = 2
+report_url_calls = 0
+report_url_last_called = 0
 
 
 def uploadToDocker(update, context):
@@ -410,6 +412,52 @@ def scan_url(update, context):
         message = "Please provide a valid URL."
         context.bot.send_message(chat_id=chat_id, text=message)
 
+def write_url_to_csv(url):
+    fieldnames = ['Reported Link', 'Label']
+    with open('toReview.csv', 'a', newline='') as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        writer.writerow({'Reported Link': url, 'Label': ''})
+
+def rate_limit(limit, period):
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            global report_url_calls
+            global report_url_last_called
+
+            now = time.time()
+            elapsed_time = now - report_url_last_called
+
+            if elapsed_time < period:
+                if report_url_calls >= limit:
+                    return  # Rate limit exceeded, do not execute the function
+
+            # Execute the function
+            result = func(*args, **kwargs)
+
+            # Update rate limit variables
+            report_url_calls += 1
+            report_url_last_called = now
+
+            return result
+        return wrapper
+    return decorator
+
+# The actual report_url function
+@rate_limit(limit=2, period=3600)  # 2 requests per 3600 seconds (1 hour)
+def report_url(update, context):
+    chat_id = update.message.chat_id
+    url = context.args[0] if context.args else None
+
+    if url:
+        # Write the URL to the CSV file for manual review
+        write_url_to_csv(url)
+
+        message = f"URL '{url}' has been reported for manual review."
+        context.bot.send_message(chat_id=chat_id, text=message)
+    else:
+        message = "Please provide a valid URL."
+        context.bot.send_message(chat_id=chat_id, text=message)
+  
 
 # Function to handle the /subscribe command
 def start(update, context):
@@ -533,6 +581,21 @@ def profile_confirmation(update, context):
         # Clear the frequency preference if switching to non-tech savvy
         if new_profile == 'non_tech_savvy':
             preferences[str(chat_id)][0] = None
+        else:
+            preferences[str(chat_id)][1] = "tech_savvy"
+            save_preferences(preferences)
+            frequency_options = {
+                '1': 'Default (1 article per day)',
+                '2': 'Regularly (Up to 2 articles per day)',
+                '3': 'Informative (Up to 3 articles per day)'
+            }
+
+            options = [
+                [InlineKeyboardButton(option, callback_data=key)] for key, option in frequency_options.items()
+            ]
+            reply_markup = InlineKeyboardMarkup(options)
+            context.bot.send_message(chat_id=chat_id, text='Choose your preferred frequency:', reply_markup=reply_markup)
+            return FREQUENCY
 
         # Save the updated preferences to the file
         save_preferences(preferences)
@@ -651,6 +714,7 @@ dispatcher.add_handler(CommandHandler('unsubscribe', unsubscribe))
 #dispatcher.add_handler(CommandHandler('frequency', set_frequency, pass_args=True))
 #dispatcher.add_handler(CommandHandler('profile', set_profile, pass_args=True))
 dispatcher.add_handler(CommandHandler('scanurl', scan_url, pass_args=True))
+dispatcher.add_handler(CommandHandler('report', report_url, pass_args=True))
 dispatcher.add_handler(message_handler)
 
 
