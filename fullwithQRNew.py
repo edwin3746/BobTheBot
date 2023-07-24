@@ -6,7 +6,6 @@ import pandas as pd
 import json
 import time
 from urllib.parse import urljoin
-import snscrape.modules.twitter as sntwitter
 import feedparser
 import pytz
 import requests
@@ -47,11 +46,6 @@ with open('non_tech_savvy_model.pkl', 'rb') as file:
     non_tech_savvy_model = pickle.load(file)
     non_tech_savvy_vectorizer = pickle.load(file)
         
-   #load TECH SAVVY model
-with open('tech_savvy_model.pkl', 'rb') as file:
-    tech_savvy_model = pickle.load(file)
-    tech_savvy_vectorizer = pickle.load(file)
-
 # Function to preprocess the input text and convert it to a feature vector
 def preprocess_text(text, vectorizer):
     if isinstance(text, str):
@@ -284,10 +278,8 @@ def get_latest_news():
     preferences = load_preferences()
     keys = preferences.keys()
     base_url = 'https://www.csa.gov.sg/alerts-advisories'
-    
 
-
-    for i in range(1, 200):
+    for i in range(1, 2):
         url = 'https://www.csa.gov.sg/api/card-title/GetNewsCardTitles'
         headers = {
             'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
@@ -316,49 +308,42 @@ def get_latest_news():
 
         response = requests.post(url, headers=headers, data=data)
         data = response.json()
-
         # Iterate over each object in the "objects" list
         for obj in data["objects"]:
-            date_obj = datetime.datetime.strptime(obj["date"], "%d %b %Y")
-            formatted_date = date_obj.strftime("%d/%m/%Y")
-            file_exists = os.path.isfile(filename)
+          date_obj = datetime.datetime.strptime(obj["date"], "%d %b %Y")
+          formatted_date_3 = date_obj.strftime("%d/%m/%Y")
+          file_exists = os.path.isfile(filename)
+
+          model = non_tech_savvy_model
+          vectorizer = non_tech_savvy_vectorizer
             
-            for chat_id in keys:
-                frequency, profile = preferences[chat_id] 
-
-                if profile == "tech_savvy":
-                    model = tech_savvy_model
-                    vectorizer = tech_savvy_vectorizer
-                    message1 = "Using tech savvy model"
+          relevance_prediction = predict_relevance(str(obj["desc"]), vectorizer, model)
+                #relevance_prediction_list = relevance_prediction.tolist()
+          if current_formatted_date != formatted_date_3:
+            with open(filename, 'a' if file_exists else 'w', newline='', encoding='utf-8') as csvfile:
+              writer = csv.writer(csvfile)
+              if not file_exists:
+                writer.writerow(['subscriber_id', 'article_date', 'article_title'])
+              if str(relevance_prediction) == "[0]":
+                for chat_id in keys:
+                  frequency, profile = preferences[chat_id]
+                  if profile == "tech_savvy":
+                    print("sending tech savy")
+                    news_url = urljoin(base_url, obj["link"])
+                    writer.writerow([chat_id, obj["desc"], news_url])
+                    message1 = "Latest Alert & Advisories: " + obj["desc"] + " Click here for the full article " + news_url
                     bot.send_message(chat_id=chat_id, text=message1)
-                    
-                elif profile == "non_tech_savvy":
-                    model = non_tech_savvy_model
-                    vectorizer = non_tech_savvy_vectorizer
-                    message1 = "Using non tech savvy model"
-                    bot.send_message(chat_id=chat_id, text=message1)
-
-                # filter relevance using trained model
-                relevance_prediction = predict_relevance(str(obj["desc"]), vectorizer, model)
-                relevance_prediction_list = relevance_prediction.tolist()
-            
-
-                if current_formatted_date == formatted_date:
-                    with open(filename, 'a' if file_exists else 'w', newline='', encoding='utf-8') as csvfile:
-                        writer = csv.writer(csvfile)
-                        if not file_exists:
-                            writer.writerow(['subscriber_id', 'article_date', 'article_title'])
-                        preferences = load_preferences()
-                        keys = preferences.keys()
-                        for idx, key in enumerate(keys):
-                            if relevance_prediction_list[idx] == 1:
-                                news_url = urljoin(base_url, obj["link"])
-                                writer.writerow([key, obj["desc"], news_url])
-                                message1 = "Latest Alert & Advisories: " + obj["desc"] + " Click here for the full article " + news_url
-                                bot.send_message(chat_id=key, text=message1)
-                else:
-                    print("Old news!")
-                    return
+              else:
+                for chat_id in keys:
+                  frequency, profile = preferences[chat_id]
+                  print("sending to everyone non-tech savy news")
+                  news_url = urljoin(base_url, obj["link"])
+                  writer.writerow([chat_id, obj["desc"], news_url])
+                  message1 = "Latest Alert & Advisories: " + obj["desc"] + " Click here for the full article " + news_url
+                  bot.send_message(chat_id=chat_id, text=message1)
+          else:
+            print("Old news!" + current_formatted_date + " "+ formatted_date_3 + obj["link"])
+              #return
                                
 # Function to send articles to subscribers based on frequency preference
 def send_articles():
@@ -754,10 +739,7 @@ dispatcher = updater.dispatcher
 message_handler = MessageHandler(Filters.photo | Filters.document, uploadToDocker)
 
 # Register command handlers
-#dispatcher.add_handler(CommandHandler(['start', 'subscribe'], subscribe, pass_args=True))
 dispatcher.add_handler(CommandHandler('unsubscribe', unsubscribe))
-#dispatcher.add_handler(CommandHandler('frequency', set_frequency, pass_args=True))
-#dispatcher.add_handler(CommandHandler('profile', set_profile, pass_args=True))
 dispatcher.add_handler(CommandHandler('scanurl', scan_url, pass_args=True))
 dispatcher.add_handler(CommandHandler('report', report_url, pass_args=True))
 dispatcher.add_handler(message_handler)
@@ -783,14 +765,11 @@ updater.dispatcher.add_handler(conv_handler)
 # Start the bot
 updater.start_polling()
 
-#Schedule the get_latest_news function to run every day
-schedule.every().day.at("08:04").do(get_latest_news)
-
-#Schedule the get_latest_tweets function to run every day
-#schedule.every().day.at("01:00").do(get_latest_tweets)
+# Schedule the get_latest_news function to run every day
+schedule.every().day.at("09:02").do(get_latest_news)
 
 # Schedule the send_articles function to run every day
-schedule.every().day.at("08:04").do(send_articles)
+schedule.every().day.at("09:02").do(send_articles)
 
 
 while True:
@@ -798,8 +777,8 @@ while True:
     time.sleep(1)
     # Uncomment below for testing
     # send_articles()
-    # get_latest_news()
-    # time.sleep(10)
+    #get_latest_news()
+    #time.sleep(10)
 
 # Stop the bot gracefully
 updater.stop()
